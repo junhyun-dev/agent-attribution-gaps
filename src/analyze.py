@@ -40,7 +40,15 @@ def read_gitlog(path):
             cur = dict(hash=h, ts=pd.Timestamp(int(at), unit="s", tz="UTC"), author=an, subject=subj, files=[])
             rows.append(cur)
         elif line.strip() and cur is not None:
-            cur["files"].append(line.strip())
+            parts = line.split("\t")
+            if len(parts) >= 2 and len(parts[0]) <= 4 and parts[0][:1] in "AMDTCRUX":
+                # --name-status: keep added/modified paths; a deleted path has no content to attribute
+                if parts[0].startswith("D"):
+                    cur.setdefault("deleted", []).append(parts[-1])
+                else:
+                    cur["files"].append(parts[-1])
+            else:
+                cur["files"].append(line.strip())
     return rows
 
 

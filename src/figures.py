@@ -49,37 +49,53 @@ ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b %d"))
 fig.tight_layout()
 fig.savefig(os.path.join(OUT, "fig1_activity.png"))
 
-# ---- Figure 2: what an overseer can attribute, by log source ----
-oc, of, lw, h2 = R["observability_commits"], R["observability_files"], R["linked_workers"], R["h2"]
-rows = [
-    ("Commits naming their session\n(agent-written commit subject)", oc["agent_written_session_claim"], oc["git_commits"]),
-    ("Commits tied to a session\n(harness logs: shell call + subject + time)", oc["harness_matched"], oc["git_commits"]),
-    ("Committed file changes with an\nedit-tool event in prior 24 h", of["seen_any_structured_write_24h"], of["file_changes"]),
-    ("  - text files only", of["by_kind"]["text"]["seen"], of["by_kind"]["text"]["n"]),
-    ("Codex worker runs tied to\nthe session that launched them", lw["linked"], lw["codex_exec"]),
-    ("Harness-detected write conflicts with\na visible conflicting writer", h2["with_other_team_write_30min_before"], h2["stale_rejects"]),
-]
-fig, ax = plt.subplots(figsize=(6.5, 2.9))
-ys = list(range(len(rows)))[::-1]
-for y, (lab, k, n) in zip(ys, rows):
-    p = k / n
-    lo, hi = wilson(k, n)
-    ax.barh(y, 1, color="#eef2f8", height=0.62)
-    ax.barh(y, p, color=BLUE if p >= 0.5 else GREY, height=0.62)
-    ax.errorbar(p, y, xerr=[[max(0, p - lo)], [max(0, hi - p)]], fmt="none", ecolor="black", lw=0.7, capsize=2)
-    ax.text(1.01, y, f"{100*p:.0f}%  ({k:,} / {n:,})", va="center", fontsize=7.5)
-ax.set_yticks(ys)
-ax.set_yticklabels([r[0] for r in rows], fontsize=7.5)
-ax.set_xlim(0, 1)
-ax.set_xticks([0, .25, .5, .75, 1])
-ax.set_xticklabels(["0", "25%", "50%", "75%", "100%"])
-ax.set_xlabel("share an overseer can attribute from the logs (95% Wilson CI)")
-fig.tight_layout()
+# ---- Figure 2: coverage under each matching procedure ----
+oc, lw, h2 = R["observability_commits"], R["linked_workers"], R["h2"]
+sr = json.load(open(os.path.join(D, "shellrefs.json")))
+fig, axes = plt.subplots(3, 1, figsize=(6.5, 3.6), gridspec_kw={"height_ratios": [2, 1.15, 2]})
+def bars(ax, rows):
+    ys = list(range(len(rows)))[::-1]
+    for y, (lab, k, n) in zip(ys, rows):
+        p = k / n
+        lo, hi = wilson(k, n)
+        ax.barh(y, 1, color="#eef2f8", height=0.6)
+        ax.barh(y, p, color=BLUE if p >= 0.5 else GREY, height=0.6)
+        ax.text(1.01, y, f"{100*p:.0f}%  ({k:,} / {n:,})", va="center", fontsize=7.3)
+    ax.set_yticks(ys)
+    ax.set_yticklabels([r[0] for r in rows], fontsize=7.3)
+    ax.set_xlim(0, 1)
+    ax.set_xticks([])
+    ax.spines["bottom"].set_visible(False)
+bars(axes[0], [("Commits: subject names a session\n(written by the agent)", oc["agent_written_session_claim"], oc["git_commits"]),
+               ("Commits: linked to a session\n(shell call + subject + time)", oc["harness_matched"], oc["git_commits"])])
+axes[0].set_title("A. Which session made the commit?", fontsize=8, loc="left")
+ax = axes[1]
+segs = [("edit-tool event", sr["seen_edit_tool"], BLUE),
+        ("file path in a shell command", sr["unseen_text_path_named"] + sr["unseen_other_path_named"], "#6f9be0"),
+        ("only its folder in a shell command", sr["unseen_text_folder_named"] + sr["unseen_other_folder_named"], LIGHT),
+        ("not named", sr["unseen_text_not_named"] + sr["unseen_other_not_named"], "#e5e7eb")]
+tot = sr["total_changes"]
+left = 0
+for lab, k, colr in segs:
+    ax.barh(0, k / tot, left=left, color=colr, height=0.55, edgecolor="white", lw=0.6)
+    if k / tot > 0.05:
+        ax.text(left + k / tot / 2, 0, f"{100*k/tot:.0f}%", ha="center", va="center", fontsize=7.3, color="white" if colr in (BLUE, "#6f9be0") else "black")
+    left += k / tot
+ax.set_xlim(0, 1); ax.set_yticks([0]); ax.set_yticklabels([f"Committed file changes\n(n = {tot:,})"], fontsize=7.3); ax.set_xticks([])
+ax.spines["bottom"].set_visible(False)
+ax.set_title("B. What in the logs points to the file in the 24 h before the commit?", fontsize=8, loc="left")
+from matplotlib.patches import Patch  # noqa: E402
+ax.legend(handles=[Patch(color=c_, label=l_) for l_, _, c_ in segs], frameon=False, fontsize=6.6, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.05))
+bars(axes[2], [("Worker runs: launcher found\n(our rule)", lw["linked"], lw["codex_exec"]),
+               ("Worker runs: launcher found\n(strict rule, independent recount)", 109, lw["codex_exec"])])
+axes[2].set_title("C. Which session launched the worker?", fontsize=8, loc="left")
+fig.tight_layout(h_pad=0.6)
 fig.savefig(os.path.join(OUT, "fig2_observability.png"), bbox_inches="tight")
 
 # ---- Figure 3: cross-role commits before/after, with and without the coordinator ----
 h = pd.read_csv(os.path.join(D, "h3_files.csv"))
-coord = (h.last_lineage.fillna("") == "총괄") | (h.committer_lineage.fillna("") == "총괄")
+_row = (h.last_lineage.fillna("") == "총괄") | (h.committer_lineage.fillna("") == "총괄")
+coord = h.hash.map(h.assign(r=_row).groupby("hash").r.any())  # commit-level
 groups = [("all commits", h), ("commits not involving\nthe coordinator role", h[~coord])]
 fig, ax = plt.subplots(figsize=(4.2, 2.4))
 x = 0
@@ -89,7 +105,14 @@ for lab, g in groups:
     for i, per in enumerate(("before", "after")):
         s = pc[pc.period == per]
         k, n = int(s.foreign.sum()), len(s)
-        lo, hi = wilson(k, n)
+        # day-clustered bootstrap interval (commits on one day are not independent)
+        dd = g.assign(ts=pd.to_datetime(g.ts, utc=True)).groupby("hash").agg(ts=("ts", "first"), f=("foreign", "any"), p=("period", "first"))
+        dd = dd[dd.p == per].groupby(dd[dd.p == per].ts.dt.floor("D")).f.agg(["sum", "count"])
+        import numpy as np
+        rng = np.random.default_rng(20261107)
+        idx = rng.integers(0, len(dd), size=(4000, len(dd)))
+        rr = dd["sum"].values[idx].sum(1) / dd["count"].values[idx].sum(1)
+        lo, hi = np.percentile(rr, 2.5), np.percentile(rr, 97.5)
         ax.bar(x + i * 0.8, k / n, width=0.75, color=GREY if per == "before" else BLUE)
         ax.errorbar(x + i * 0.8, k / n, yerr=[[max(0, k / n - lo)], [max(0, hi - k / n)]], fmt="none", ecolor="black", lw=0.7, capsize=2)
         ax.text(x + i * 0.8, hi + 0.004, f"{100*k/n:.1f}%\n{k}/{n}", ha="center", fontsize=6.5)
@@ -101,7 +124,7 @@ ax.set_xticklabels(labs, fontsize=7.5)
 ax.set_ylabel("commits that include a file\nlast written by another role", fontsize=7.5)
 from matplotlib.patches import Patch  # noqa: E402
 ax.legend(handles=[Patch(color=GREY, label="before Oct 26 07:10 UTC"), Patch(color=BLUE, label="after")], frameon=False, fontsize=7)
-ax.set_ylim(0, 0.2)
+ax.set_ylim(0, 0.32)
 fig.tight_layout()
 fig.savefig(os.path.join(OUT, "fig3_crossrole.png"))
 print("ok")

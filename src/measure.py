@@ -82,7 +82,8 @@ def main():
     a = a[pd.to_datetime(a.first_ts, utc=True, errors="coerce") < until]
     L = pd.read_csv(os.path.join(D, "launches.csv"), dtype=str)
     a, link, how = teams(a, L)
-    git = analyze.read_gitlog(os.path.join(D, "gitlog.txt"))
+    gl = os.path.join(D, "gitlog_status.txt")
+    git = analyze.read_gitlog(gl if os.path.exists(gl) else os.path.join(D, "gitlog.txt"))
     t0, t1 = w.ts.min(), w.ts.max()
     git = [g for g in git if t0 <= g["ts"] <= t1]
     R = {"window_utc": [str(t0), str(t1)], "days": round((t1 - t0).total_seconds() / 86400, 1)}
