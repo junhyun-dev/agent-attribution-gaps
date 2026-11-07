@@ -1,0 +1,5 @@
+out/
+.venv/
+__pycache__/
+paper/pg-*.png
+paper/report.pdf

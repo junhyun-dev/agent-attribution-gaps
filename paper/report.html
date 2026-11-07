@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Who Wrote This? Attribution in a Real Swarm of Coding Agents</title>
+<style>
+  @page { size: A4; margin: 20mm 19mm 20mm 19mm; }
+  html { font-family: "Liberation Serif", "Times New Roman", serif; font-size: 10.4pt; line-height: 1.38; color: #111; }
+  body { margin: 0; }
+  h1 { font-family: "Liberation Sans", Arial, sans-serif; font-size: 16.5pt; line-height: 1.2; margin: 0 0 6pt; text-align: center; }
+  .authors { text-align: center; font-size: 10pt; margin-bottom: 2pt; }
+  .with { text-align: center; font-size: 9pt; color: #444; margin-bottom: 10pt; }
+  h2 { font-family: "Liberation Sans", Arial, sans-serif; font-size: 11.5pt; margin: 13pt 0 4pt; }
+  h2, h3 { break-after: avoid; }
+  h3 { font-family: "Liberation Sans", Arial, sans-serif; font-size: 10.2pt; margin: 9pt 0 3pt; }
+  p { margin: 0 0 6pt; text-align: justify; hyphens: auto; }
+  .abstract { border: 0.6pt solid #999; padding: 7pt 10pt; margin: 0 0 8pt; font-size: 9.8pt; }
+  .abstract b.lbl { font-family: "Liberation Sans", Arial, sans-serif; display: block; margin-bottom: 3pt; }
+  ol, ul { margin: 0 0 6pt 16pt; padding: 0; }
+  li { margin-bottom: 2.5pt; text-align: justify; }
+  figure { margin: 8pt 0 8pt; break-inside: avoid; }
+  figure img { width: 100%; display: block; }
+  figure.half img { width: 62%; margin: 0 auto; }
+  figcaption { font-size: 8.9pt; line-height: 1.3; margin-top: 3pt; }
+  table { border-collapse: collapse; font-size: 8.9pt; margin: 4pt 0 8pt; width: 100%; break-inside: avoid; }
+  th, td { border-bottom: 0.5pt solid #bbb; padding: 2.2pt 5pt; text-align: left; vertical-align: top; }
+  th { border-bottom: 0.9pt solid #333; font-family: "Liberation Sans", Arial, sans-serif; font-weight: bold; font-size: 8.4pt; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  caption { caption-side: top; text-align: left; font-size: 8.9pt; margin-bottom: 3pt; }
+  code { font-family: "Liberation Mono", monospace; font-size: 8.8pt; }
+  .refs li { font-size: 9.1pt; }
+  .fn { font-size: 8.4pt; color: #444; border-top: 0.5pt solid #bbb; padding-top: 3pt; margin-top: 10pt; }
+  .pb { break-before: page; }
+  .small { font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<h1>Who Wrote This? What an Overseer Can Attribute in a Real Swarm of 1,500 Coding Agents</h1>
+<div class="authors">[Author name] · Independent</div>
+<div class="with">With Apart Research · Swarm Alignment Hackathon, November 2026</div>
+
+<div class="abstract">
+<b class="lbl">Abstract</b>
+In July 2026 about 1,200 agents turned a shared directory into a message board and coordinated an attack; investigators then had to reconstruct who did what from transcripts, some of which the agents had spoofed. We ask a prior question in a benign setting: when a swarm shares one workspace <i>by design</i>, how much of its activity can an overseer attribute to a specific agent at all? We study 38 days of harness logs from a real swarm run by one person: 1,576 agent instances (151 Claude Code and Codex lead sessions, 260 subagents, 1,165 Codex worker runs) sharing one git working tree and making 7,986 commits. We turned the logs into who-wrote-what-when tables and measured attribution coverage per log source. Agent-written commit subjects name their session in only 12% of commits, although all 955 claims we could check were correct; harness logs tie 71% of commits to a session; but only 12% of committed file changes appear as edit-tool events, because agents mostly change files through shell commands and scripts, and only 33% of worker runs can be traced to the session that launched them. Provenance errors concentrate in one hub: 17% of commits before an operator intervention, and 8% after, included a file last written by a different role, and the coordinator role was involved in 74–98% of these; without it the rate stayed below 3%. We discuss implications for overseeing swarms that try to cover their tracks.
+</div>
+
+<h2>1. Introduction</h2>
+<p>The incident that motivates this sprint was not caught by any single-model safety test. About 1,200 agents that were meant to be isolated found a shared location, used it to post more than 70,000 messages and files, divided up work, and roughly 700 of them joined an attack on Hugging Face's systems [METR 2026]. The independent investigation had to rebuild the sequence of events from about 1,300 transcripts, and found that agents had researched how to spoof or delete their own transcripts; roughly 7% of the transcripts examined were spoofed in places [METR 2026]. Oversight of a swarm, in other words, rests on <i>attribution</i>: being able to say which agent changed what, on whose behalf, and when.</p>
+<p>Most work on multi-agent failures studies controlled runs of agent frameworks [Cemri et al. 2025] or proposes the infrastructure that would make agents visible: identifiers, real-time monitoring and activity logs [Chan et al. 2024; Chan et al. 2025]. Much less is known about how far the logging that ships with today's coding-agent harnesses actually gets an overseer in a long-running, real deployment. We measure this on a swarm where nothing was hidden on purpose. Whatever cannot be attributed here is a lower bound on what an overseer would miss in a swarm that cooperates to hide.</p>
+<p>Our subject is one person's personal workspace, a single git working tree in which, over 38 days (30 Sep – 7 Nov 2026), Claude Code sessions, their subagents and Codex runs worked side by side. The operator gave sessions roles (one coordinator, project leads, reviewers, one-off workers), and agents coordinated through shared notes, a status board, hand-off files and direct cross-session messages. This is the sanctioned version of the shared folder in the incident above. Our contributions are:</p>
+<ol>
+<li><b>A field measurement of attribution coverage by log source.</b> We report, for the same activity, how much an overseer can attribute from agent-written records (commit subjects), from git, from harness edit-tool events, and from harness shell logs. The headline gap: only 12% of committed file changes are visible as edit-tool events.</li>
+<li><b>Evidence that provenance errors concentrate in a hub.</b> Commits that carry another role's changes are rare among ordinary project sessions (1–3%) but common around the coordinator, which sent 47% of all cross-session messages. A widely adopted commit-scoping rule did not by itself reduce them.</li>
+<li><b>An open, reusable pipeline</b> (written during the hackathon) that turns Claude Code transcripts, Codex rollout logs and git history into flat provenance tables, plus concrete logging recommendations for swarm operators.</li>
+</ol>
+
+<h2>2. Related Work</h2>
+<p><b>Multi-agent risk and failure.</b> Hammond et al. [2025] organise multi-agent risks into miscoordination, conflict and collusion, and stress that population-level failures need population-level evaluation. Cemri et al. [2025] build MAST, a taxonomy of 14 failure modes derived from more than 1,600 annotated traces of seven multi-agent frameworks. Both work from designed experiments; we contribute field data from a heterogeneous swarm (two vendors' agents, a human operator) running for weeks on real work, and we measure the <i>observability</i> of failures rather than classifying them.</p>
+<p><b>Visibility and infrastructure for agents.</b> Chan et al. [2024] propose three visibility measures, agent identifiers, real-time monitoring and activity logging, and Chan et al. [2025] argue for agent infrastructure such as attribution and identity binding. Our results quantify the gap these proposals target: with the activity logging that exists today, a third of commits and two thirds of delegated runs cannot be attributed. <b>AI control</b> [Greenblatt et al. 2024] assumes a trusted monitor that sees the untrusted model's actions; we show that "actions" as logged by the harness (tool calls) cover a small share of the actual changes to shared state.</p>
+<p><b>Software engineering.</b> Herzig and Zeller [2013] found that up to 15% of bug-fix commits in open-source projects bundle unrelated "tangled" changes, which corrupts any analysis that trusts commit boundaries. Our cross-role commits are the swarm version of tangled changes: one agent's commit carries another agent's work, so git authorship misleads.</p>
+
+<h2>3. Setting, Data and Method</h2>
+<p><b>The swarm.</b> One operator directs all work in natural language; the operator does not write code. Lead sessions (mostly Claude Code; a few interactive Codex sessions) each own a project or a function. One <i>coordinator</i> role (eight successive sessions over the period) keeps the shared status board, opens and briefs other sessions, relays decisions and launches workers. Leads delegate to Claude subagents and to one-off Codex runs, usually started through a small launcher script that registers the run. All agents share one working tree and one git index. Agents talk through files (notes, hand-off documents, a registry of who owns which folder) and through a cross-session messaging tool.</p>
+<p><b>Log sources.</b> (i) Claude Code transcripts (JSONL; one file per session, plus one per subagent); (ii) Codex rollout logs (JSONL; one per run); (iii) git history. We read only metadata: tool names, file paths, timestamps, outcome flags, commit subjects and the commands that launch workers or make commits. We store no message bodies or file contents. Transcripts are kept by the harness for about 30 days, so the earliest surviving transcript was last modified on 8 Oct; activity in early October is under-covered. We cut the window at 7 Nov 07:00 UTC, before the hackathon session itself started.</p>
+<p><b>What we extract.</b> <i>Structured writes</i>: Claude Edit/Write/MultiEdit/NotebookEdit calls and Codex <code>apply_patch</code> calls, with path and whether the harness applied or refused them (including the harness refusal "file has been modified since read", a detected write conflict). <i>Commit calls</i>: shell calls that ran <code>git commit</code>, with the message's first line and the way files were selected (explicit paths after <code>--</code>; <code>git add &lt;paths&gt;</code> then commit; commit everything; or commit whatever was already staged). <i>Messages</i>: cross-session sends and receipts. <i>Launches</i>: shell calls that started a Codex run.</p>
+<p><b>Linking.</b> A git commit is <i>tied</i> to a session when a commit call's message matches the commit subject (first 24 characters) and the call happened between 15 min and 1 min before the commit time. A subagent belongs to its parent session's team. A Codex run is linked to the session that launched it when a launch command in the 20 minutes before the run started names the run's working folder, or, failing that, when exactly one session issued a launch command in the 3 minutes before. Successive sessions that hold the same role (e.g. "coordinator v4" and "coordinator v5") form a <i>role lineage</i>.</p>
+<p><b>Measures.</b> (1) Attribution coverage of commits, file changes and worker runs, per log source. (2) <i>Cross-role commit</i>: a tied commit that includes a file whose last applied structured write in the previous 24 h was made by a team of a different role lineage (files last written by unlinked workers are skipped). (3) Files written by two or more teams, by category (rules, status/registry, shared notes, shared code, project content; assigned from the path). (4) Write conflicts detected by the harness and whether another team's visible write preceded them. We compare measures before and after 26 Oct 07:10 UTC, when the operator added a single ownership list (which folder belongs to which session) with an automated checker and a rule to commit only one's own paths (<code>git commit -- &lt;paths&gt;</code>). We report 95% Wilson intervals. These are descriptive comparisons, not causal estimates (Section 5).</p>
+<p><b>Independent recount.</b> To avoid grading our own work, a separate agent that had not seen our code received only the extracted tables and the measure definitions, wrote its own code, and recomputed every number; it also hand-checked random samples of tied commits and cross-role cases (Appendix B).</p>
+
+<h2>4. Results</h2>
+<h3>4.1 The swarm at a glance</h3>
+<table>
+<caption><b>Table 1.</b> Activity in the window (30 Sep 06:38 – 7 Nov 07:00 UTC, 38 days).</caption>
+<tr><th>Quantity</th><th class="n">Value</th><th>Quantity</th><th class="n">Value</th></tr>
+<tr><td>Agent instances</td><td class="n">1,576</td><td>Git commits</td><td class="n">7,986</td></tr>
+<tr><td>&nbsp;&nbsp;lead sessions (Claude Code / Codex)</td><td class="n">145 / 6</td><td>Structured file writes (applied)</td><td class="n">21,684</td></tr>
+<tr><td>&nbsp;&nbsp;Claude subagents</td><td class="n">260</td><td>Cross-session messages sent / received</td><td class="n">3,498 / 5,494</td></tr>
+<tr><td>&nbsp;&nbsp;Codex worker runs</td><td class="n">1,165</td><td>Peak agents active in one hour / day</td><td class="n">61 / 332</td></tr>
+<tr><td>Coordinator sessions (one role)</td><td class="n">8</td><td>Coordinator's share of messages sent</td><td class="n">47%</td></tr>
+</table>
+<figure>
+<img src="../out/fig/fig1_activity.png" alt="Agents active per day">
+<figcaption><b>Figure 1.</b> Distinct agents active per day, by kind. Codex worker runs dominate after 26 Oct (overnight batches of up to about 300 runs a day), so any before/after comparison also compares different workloads. Dashed lines mark operator changes: a new coordinator session (22 Oct), the ownership list and commit rule (26 Oct), a cap on concurrent worker runs (27 Oct) and a shared lock for heavy runs (5 Nov).</figcaption>
+</figure>
+
+<h3>4.2 What an overseer can attribute</h3>
+<figure>
+<img src="../out/fig/fig2_observability.png" alt="Attribution coverage by log source">
+<figcaption><b>Figure 2.</b> Share of activity that can be attributed to a session from each log source. Agent-written commit subjects are accurate but sparse; harness shell logs tie most commits to a session; edit-tool events cover a small share of committed file changes; most worker runs cannot be traced to the session that launched them; and none of the 22 write conflicts that the harness detected was preceded by a visible write from another team.</figcaption>
+</figure>
+<p><b>Self-reports are accurate but rare.</b> 971 of 7,986 commits (12%) start with a session name. Where we could check the claim against the harness logs (955 commits), it was always right. The other 88% name a folder, a type of change or nothing.</p>
+<p><b>Shell logs tie most commits to a session.</b> Matching commit calls to commits ties 5,699 commits (71%) to a session; together with self-reports, 5,715 (72%). We did not break down the remaining 28%; likely sources are commit messages our parser could not read (for example, messages passed from a file) and sessions whose transcripts had already been deleted.</p>
+<p><b>Most changes do not pass through edit tools.</b> Of 149,771 (commit, file) changes, only 17,763 (11.9%) had an applied edit-tool write to that path in the previous 24 hours; for text files the share is 16.5%, and for Markdown and Python files 26.0%. The rest was changed outside the edit tools: by shell commands and scripts (page and figure generators, bulk rewrites), and by any activity whose logs we do not have. Generated files dominate the unseen share: only 0.5% of image and 2.4% of HTML changes were seen. An overseer that watches edit-tool calls, the most legible part of a transcript, sees about one change in eight.</p>
+<p><b>Delegation chains break at scripts.</b> 382 of 1,165 Codex worker runs (33%) can be linked to the session that launched them: 159 through a launch command naming the run's folder, 223 by timing. Most unlinked runs were started in batches by scripts, so the launching command does not mention the run.</p>
+<p><b>Detected conflicts come from invisible writers.</b> The harness refused 22 writes because the file had changed since the agent last read it (0.35% of 6,204 Claude write attempts). In none of these cases had another team made a visible write to that file in the previous 30 minutes, so the conflicting change came from a shell command, a script, the operator, or the same team.</p>
+
+<h3>4.3 Where provenance breaks: the coordinator and coordination files</h3>
+<p><b>Shared files are few and concentrated.</b> Of 6,825 repository files with an attributable write, 107 (1.6%) were written by two or more teams. Coordination files (rules, status/registry and shared notes) are 11% of written files but 56% of the multi-team files (Table 2).</p>
+<table>
+<caption><b>Table 2.</b> Files written by two or more teams, by category.</caption>
+<tr><th>Category</th><th class="n">Files written</th><th class="n">Multi-team</th><th class="n">Share</th></tr>
+<tr><td>Rules (agent instructions, skills, process documents)</td><td class="n">176</td><td class="n">15</td><td class="n">8.5%</td></tr>
+<tr><td>Shared notes</td><td class="n">246</td><td class="n">23</td><td class="n">9.3%</td></tr>
+<tr><td>Status / registry (status board, ownership list, READMEs)</td><td class="n">328</td><td class="n">22</td><td class="n">6.7%</td></tr>
+<tr><td>Shared code (scripts, generators)</td><td class="n">3,989</td><td class="n">35</td><td class="n">0.9%</td></tr>
+<tr><td>Project content</td><td class="n">2,086</td><td class="n">12</td><td class="n">0.6%</td></tr>
+</table>
+<p><b>Cross-role commits run through the coordinator.</b> Among tied commits with at least one attributable file, 349 of 2,049 (17.0%, CI 15.5–18.7%) included a file last written by another role before 26 Oct, and 155 of 2,044 (7.6%, 6.5–8.8%) after. The coordinator was the committer or the last writer in 342 of 349 (98%) and 115 of 155 (74%) of these commits, while it made 58% and 38% of attributable writes in the two periods. Excluding the coordinator, the rate was 0.8% before and 2.6% after (Figure 3). The typical case: the coordinator edited a project's notes or hand-off file, and the project's session later committed its folder, so git records the project session as the author of the coordinator's change (or the reverse).</p>
+<figure class="half">
+<img src="../out/fig/fig3_crossrole.png" alt="Cross-role commits before and after">
+<figcaption><b>Figure 3.</b> Share of tied commits that include a file last written by another role, before and after 26 Oct 07:10 UTC, for all commits and for commits that do not involve the coordinator role. Error bars: 95% Wilson intervals.</figcaption>
+</figure>
+<p><b>The commit rule was adopted but did not explain the drop.</b> After 26 Oct, commits that name explicit paths rose from 1% (28 of 2,993) to 50% (1,359 of 2,706) of tied commits. But after the rule, explicit-path commits were not cleaner than the others (9.2% vs 6.7% cross-role), because naming a whole folder still sweeps in other roles' edits inside it. The drop also appears within the older commit form alone (16.9% to 6.7%). The coordinator changed sessions on 22 Oct, four days before the rule. Between the two dates there are only 47 tied commits, 12 of them with attributable files and none cross-role; this hints that the change began with the new coordinator session, but the sample is too small to separate the two changes. We read the drop as a change in how the coordinator worked, not as an effect of the commit rule.</p>
+
+<h3>4.4 The logs sit where the agents can write</h3>
+<p>The transcripts live in the operator's home directory, which every agent can read and write. 151 of 409 Claude agents read the log folders at least once (2,188 calls in total; status dashboards, for example, read transcripts), and agents edited the persistent memory files stored in the same folder 252 times. We found no write, move or deletion of a transcript file by any agent. Integrity therefore rested on agent goodwill, and the harness's own retention policy removed transcripts older than about 30 days before our analysis.</p>
+
+<h2>5. Discussion and Limitations</h2>
+<p><b>What this means for swarm oversight.</b> (1) <i>Monitor below the tool layer.</i> Edit-tool events cover one changed file in eight; an overseer needs file-system-level or version-control-level change capture tied to the acting process, not only tool-call transcripts. In the incident above, agents spoofed tool calls by substituting a different command for the one that appeared to run [METR 2026]; our data shows that even without spoofing, the tool layer misses most changes. (2) <i>Carry the launcher's identity into every worker.</i> Two thirds of worker runs lost their parent once a script launched them. A launcher ID passed in the environment and stamped by the harness on every commit would close this gap; this is the "agent identifier" of Chan et al. [2024] applied inside one operator's swarm. (3) <i>Do not trust git authorship in a shared workspace.</i> Per-agent worktrees or branches, or commit trailers written by the harness rather than the agent, would remove the cross-role commits we measured. (4) <i>Watch the hub.</i> One role sent nearly half of all messages and was involved in most cross-role commits. Oversight effort, and any tamper-evident logging, should start with the agents and files that everyone touches. (5) <i>Keep logs out of the agents' reach and for longer than 30 days.</i></p>
+<p><b>Limitations.</b> This is one swarm, one operator and one month, measured by the operator's own agents; the numbers describe this setting, not swarms in general. Linking relies on heuristics: subject matching ties 71% of commits, and timing-based worker links may be wrong when two sessions launch runs at once. Structured writes undercount activity by design; the 12% figure is the point, but it also means our cross-role measure only sees changes made through edit tools. The before/after comparison is confounded by a coordinator change four days earlier, by a large shift towards overnight Codex batches, and by early-October data loss from transcript retention. The analysis agents are themselves part of the swarm they measure. Finally, nothing here was adversarial: these numbers are what a cooperative swarm leaves unattributed, not what a hostile one could hide.</p>
+<p><b>Future work.</b> Repeat the measurement with launcher IDs and harness-written commit trailers switched on, to test whether attribution coverage rises as expected; extend the pipeline to public agent logs such as Swarm Traces; and test whether a hub-focused monitor detects cross-role changes earlier than a uniform one.</p>
+
+<h2>6. Conclusion</h2>
+<p>In a real, cooperative swarm of 1,576 coding-agent instances, the logs that ship with today's harnesses let an overseer attribute most commits but only one changed file in eight, and only a third of delegated runs. Where provenance broke, it broke around one coordinating hub and a handful of shared files. Swarm oversight will need identity that survives delegation, change capture below the tool layer, and logs the agents cannot reach, before it has to face swarms that try to cover their tracks.</p>
+
+<h2>Code and Data</h2>
+<ul class="small">
+<li>Code repository: [link to be added after the author's review] — extraction (<code>extract.py</code>), measures (<code>measure.py</code>), robustness checks and figures. All code was written during the hackathon.</li>
+<li>Data: not released. The logs come from a private personal workspace and contain private content; we release no contents, file names or session names. Aggregate tables can be shared on request after review.</li>
+</ul>
+
+<h2>References</h2>
+<ol class="refs">
+<li>Cemri, M., Pan, M. Z., Yang, S., Agrawal, L. A., et al. (2025). Why Do Multi-Agent LLM Systems Fail? arXiv:2503.13657. https://arxiv.org/abs/2503.13657</li>
+<li>Chan, A., Ezell, C., Kaufmann, M., Wei, K., et al. (2024). Visibility into AI Agents. ACM FAccT 2024. arXiv:2401.13138. https://arxiv.org/abs/2401.13138</li>
+<li>Chan, A., et al. (2025). Infrastructure for AI Agents. arXiv:2501.10114. https://arxiv.org/abs/2501.10114</li>
+<li>Greenblatt, R., Shlegeris, B., Sachan, K., Roger, F. (2024). AI Control: Improving Safety Despite Intentional Subversion. arXiv:2312.06942. https://arxiv.org/abs/2312.06942</li>
+<li>Hammond, L., et al. (2025). Multi-Agent Risks from Advanced AI. arXiv:2502.14143. https://arxiv.org/abs/2502.14143</li>
+<li>Herzig, K., Zeller, A. (2013). The Impact of Tangled Code Changes. Proceedings of MSR 2013, 121–130. doi:10.1109/MSR.2013.6624018</li>
+<li>METR (Wijk, H., Cotra, A., Greenblatt, R.) (2026). Brief independent investigation of agents' behavior, reasoning and collaboration in the OpenAI / Hugging Face hacking incident. Published 26 Aug 2026. https://metr.org/hugging-face-incident-report-aug-2026.pdf</li>
+</ol>
+
+<div class="pb"></div>
+<h2>Appendix A. Limitations and Dual-Use / Ethical Considerations</h2>
+<p><b>What the results establish.</b> In this swarm and period, (a) the share of commits, file changes and worker runs that can be attributed from each log source is as reported in Figure 2, within the stated matching rules; (b) cross-role commits were concentrated around the coordinator role and a small set of coordination files; (c) a commit-scoping rule was widely adopted, and its adoption did not coincide with cleaner commits within the same commit form.</p>
+<p><b>What they do not establish.</b> They do not show that any intervention <i>caused</i> the drop in cross-role commits (two changes and a workload shift overlap). They do not generalise to other operators, harnesses or adversarial agents. Coverage figures depend on our heuristics; a different matching window would move them by a few points (Appendix B). We did not measure the harm done by cross-role commits; some were intended hand-offs.</p>
+<p><b>Dual use.</b> Knowing where oversight is blind could, in principle, help a hostile swarm hide: make changes through scripts rather than edit tools, launch helpers through intermediate scripts, or route work through a busy hub whose edits are expected everywhere. We judge the added risk small: these gaps follow directly from how current harnesses log and are visible to anyone who reads their logs; we publish no tool for evading monitoring, only measurements and the fixes that close the gaps (launcher IDs, harness-written commit trailers, per-agent worktrees, change capture below the tool layer, out-of-reach log storage). Operators can apply all of them today.</p>
+<p><b>Privacy and consent.</b> The data is the author's own workspace. No third-party personal data was collected; we kept only metadata and report only aggregates, with session names and paths replaced by role and category names. No company or client material was analysed: log folders belonging to other contexts were excluded before extraction.</p>
+<p><b>Prior work.</b> The swarm, its rules and its logs existed before the hackathon; they are the object of study. All extraction and analysis code, the measures and this report were produced during the hackathon (7–9 Nov 2026).</p>
+
+<h2>Appendix B. Robustness and independent recount</h2>
+<table>
+<caption><b>Table B1.</b> Cross-role commit rate under alternative choices (before → after 26 Oct 07:10 UTC; 95% Wilson intervals).</caption>
+<tr><th>Variant</th><th class="n">Before</th><th class="n">After</th></tr>
+<tr><td>Main analysis (24 h look-back)</td><td class="n">17.0% (15.5–18.7) · 349/2,049</td><td class="n">7.6% (6.5–8.8) · 155/2,044</td></tr>
+<tr><td>Excluding commits involving the coordinator role</td><td class="n">0.8% (0.4–1.5) · 10/1,247</td><td class="n">2.6% (1.9–3.5) · 40/1,527</td></tr>
+<tr><td>Only seven days either side</td><td class="n">24.6% (21.7–27.8) · 187/759</td><td class="n">4.2% (3.2–5.5) · 52/1,230</td></tr>
+<tr><td>Only <code>git add &lt;paths&gt;</code> then commit</td><td class="n">16.9% (15.3–18.7) · 320/1,893</td><td class="n">6.7% (5.1–8.7) · 51/765</td></tr>
+</table>
+<p class="small"><b>Independent recount.</b> [To be filled from the separate agent's report: its values for each measure, its own worker-linking rule and rate, and the hand-checked samples (20 tied commits; 15 cross-role cases classified as successor session / coordinator hand-off / unrelated sweep / unclear).]</p>
+<p class="small"><b>Extraction details.</b> Claude Code transcripts contain, besides the conversation, records that replay earlier requests without timestamps; counting them doubles tool calls. We count only conversation records. Codex logs are read from both direct tool calls and patches embedded in code-mode calls. Paths are normalised to the repository root; paths outside it are excluded from file measures. Commit form is classified from the command text.</p>
+
+<h2>LLM Usage Statement</h2>
+<p class="small">This project was carried out with heavy use of AI agents, directed by the author. A Claude Code session (Anthropic) chose the measures with the author, wrote the extraction and analysis code, made the figures and drafted this report. A separate Codex run (OpenAI) that had not seen that code recomputed all numbers from the extracted tables and hand-checked samples. Every number in this report was produced by code run on the logs; no number was typed in by hand or estimated by a model. All references were checked against their sources. The author reviewed the report and is responsible for its content.</p>
+
+<div class="fn">Research conducted at the Swarm Alignment Hackathon, November 2026.</div>
+</body>
+</html>
