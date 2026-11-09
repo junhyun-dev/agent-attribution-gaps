@@ -68,3 +68,7 @@ cd paper && python3 build.py body3.html final-candidate.pdf --author "Junhyun Pa
 ## Data
 
 Not released: the logs come from a private workspace. The report gives only aggregates.
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
